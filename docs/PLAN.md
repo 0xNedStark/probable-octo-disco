@@ -280,6 +280,10 @@ Each phase states the **manual fallback** that keeps the live pilot moving.
 
 ---
 
+### Progress
+
+- **Weeks 1–2: built.** Monorepo; domain state machine with gates, facts and roles (full transition-matrix tests); Postgres schema with an append-only audit log; lead capture with consent ledger, bill upload (content-sniffed, hashed) and repeat-lead merging; manual bill-reading entry; tasks with SLA and effort capture; transactional outbox and worker; staff auth (scrypt, DB sessions, lockout); ops console (dashboard, project detail with gate checklist, workstreams, timeline, task inbox); access-logged bill viewing; CI; Playwright e2e for lead → QUALIFIED. Deferred: staff TOTP, customer OTP, S3 driver untested against real AWS.
+
 ## 10. Quality, testing and security
 
 - **Domain:** a transition matrix test (every legal transition passes, every illegal one fails) plus property-based tests for gates.
