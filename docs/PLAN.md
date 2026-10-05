@@ -1,6 +1,7 @@
 # AI-Native Solar MVP — Implementation Plan (v2)
 
 Source: *AI-Native Solar MVP — Product & Execution Specification v1.0 (Oct 2026)*.
+**v2.1:** launch geography set to UP/DVVNL; adds §3A–3D (UP specifics, SBI financing, payment milestones and refunds, engineering approval).
 This plan is the reviewed and revised version of the first-pass plan. §2 lists what changed and why.
 
 ---
@@ -58,7 +59,93 @@ This plan is the reviewed and revised version of the first-pass plan. §2 lists 
 | 50+ anonymised bills from the target DISCOM | Bill-AI eval set and calc test fixtures | Sales/Ops |
 | Hosting account in an India region | Data residency | Eng |
 
-**Default choices if not overridden:** Maharashtra/MSEDCL as a placeholder geography; Meta Cloud API via a BSP; Claude for vision and structured extraction; AWS ap-south-1 (Mumbai) for compute, Postgres and S3; Razorpay for payments.
+**Decided (v2.1):**
+- **Geography:** Uttar Pradesh, DVVNL (Dakshinanchal Vidyut Vitran Nigam). Launch city to be chosen within DVVNL territory, e.g. Agra. Customer language: Hindi/Hinglish.
+- **Vendor of record:** a DVVNL-empanelled installer partner (founder is sourcing one). We orchestrate; they hold the portal vendor role. See §3A for implications.
+- **Lender:** SBI under PM Surya Ghar is the primary candidate (to be confirmed). See §3B.
+- **Subsidy recipient:** the customer (central and UP state). Confirmed against public sources (§3A); re-confirm with the vendor partner.
+- **Booking advance and refunds:** proposed in §3C.
+- **Engineering approval:** proposed in §3D.
+
+**Remaining defaults if not overridden:** Meta Cloud API via a BSP; Claude for vision and structured extraction; AWS ap-south-1 (Mumbai) for compute, Postgres and S3; Razorpay for payments.
+
+## 3A. UP / DVVNL launch specifics
+
+All figures below are **seed config**, not code. Re-verify each with the vendor partner and UPNEDA before go-live.
+
+| Item | Current public understanding | Plan impact |
+|---|---|---|
+| Central subsidy (PM Surya Ghar) | ₹30,000/kW for the first 2 kW, ₹18,000 for the 3rd kW, capped at ₹78,000 for ≥3 kW | `subsidy_rules` row `central_psg_v1` |
+| UP state subsidy (UPNEDA) | ₹15,000/kW, capped at ₹30,000 | `subsidy_rules` row `up_state_v1`; combined maximum ₹1,08,000 at ≥3 kW |
+| Who receives the subsidy | **Customer**, by direct bank transfer after DISCOM commissioning inspection | The customer pays the **full price** up front (cash + loan). The subsidy arrives later, typically weeks after commissioning. The proposal must show "price", "you pay now" and "subsidy you receive later", not just a net price. The project tracks `SUBSIDY_RELEASED` as a follow-up and proactively helps the customer if it stalls. |
+| Eligibility | Residential, net-metered, DCR modules (ALMM List-I modules with List-II cells for systems commissioned from 1 June 2026), installed by an empanelled vendor | Catalogue flags enforced by calc; vendor-of-record recorded per project |
+| DVVNL process | Consumer registers on pmsuryaghar.gov.in with their DVVNL consumer number → selects the vendor → DISCOM feasibility (roughly 15–30 days reported) → installation → upload system details and geo-tagged photos on the portal → DVVNL inspection and net-meter (roughly 10–20 days for meter; 2–4 weeks for inspection reported) → subsidy request → release | Seed `regulatory_checklists` for DVVNL with these steps. Each step stores the portal reference and an evidence upload. Expected durations drive SLA alerts and customer ETAs. |
+| Tariff | UPERC domestic slab tariff, with fixed charges per kW of sanctioned load | Seed `tariffs` for UP domestic. Savings calc keeps fixed charges. |
+| Sanctioned load | System size above sanctioned load may need a load-enhancement application | Calc flags it; the regulatory checklist adds a load-enhancement step |
+
+**Implications of a partner as vendor of record:**
+- On the national portal the customer selects the partner. Our system stores `vendor_of_record_id` per project and tracks portal steps the partner performs, with our ops doing the chasing.
+- **Billing model needs a CA/legal decision.** Either (a) the partner invoices the customer and pays us an orchestration fee, or (b) we invoice the customer and subcontract the partner. Subsidy and lender paperwork usually expect the vendor's invoice, which favours (a) for the pilot. The data model gets a `billing_entity` per project so either model works, and the margin report handles both.
+- Commercial agreement with the partner must cover: fee or margin split, SLAs, portal responsiveness, warranty ownership, the right to audit evidence, and non-solicitation of our customers.
+
+## 3B. Financing: SBI under PM Surya Ghar (to be confirmed)
+
+Current public understanding, to verify directly with SBI:
+- Rooftop loan for systems up to 3 kW: about ₹2 lakh, collateral-free, concessional rate linked to EBLR (reported as roughly 7%), tenor up to 10 years, about 10% margin money paid by the customer.
+- Larger systems (>3 kW, up to 10 kW) fall under a different product at a higher rate.
+- The customer applies online via the JanSamarth portal or the bank.
+
+**What this means for the product:**
+- **The customer is the applicant; we assist.** We prepare a document checklist, help fill the application, and track status from customer- or partner-supplied updates. We do not collect KYC into our system beyond what the customer chooses to share for assistance, which also keeps us clear of a lending-service-provider role. Legal confirms this in week 0.
+- **Strong sizing nudge:** a 3 kW system fits the collateral-free ₹2 lakh product and the maximum combined subsidy. The calc engine marks the "sweet-spot" configuration. Recommend larger systems only when consumption justifies them.
+- Seed `lender_products`: `sbi_psg_upto3kw_v1` and `sbi_rooftop_gt3kw_v1`. EMI is labelled *illustrative* until SBI sanctions.
+- **To confirm with SBI or the partner:** whether disbursement goes to the vendor's account (and in what tranches), and the exact documents needed. This determines when procurement can safely start.
+- Cash and other lenders stay supported through the generic finance workstream.
+
+## 3C. Booking advance, payment milestones and refunds (proposal)
+
+Principles: low friction to start, money collected roughly in step with our cost exposure, and refunds generous where *we* or a third party block the project. The figures are pilot defaults stored in config, to be reviewed with legal/CA.
+
+| Step | Cash customer | SBI-loan customer |
+|---|---|---|
+| Bill assessment and indicative proposal | Free | Free |
+| **Booking token** on accepting the indicative quote (triggers survey) | ₹5,000 | ₹5,000 |
+| On accepting the **final** quote (after survey), before portal application and procurement | Pay up to 40% of price (token counts towards it) | Margin money (about 10%, token counts towards it) |
+| Material delivered to site | +50% | Loan disbursement (per SBI terms) |
+| Net-meter installed / commissioning | Final 10% | Any balance not covered by the loan |
+
+Procurement starts only when funds are secured: the cash 40% is received, or the SBI sanction letter is in hand (and the first tranche disbursed if SBI's terms require it).
+
+**Refund policy (proposal):**
+
+| When cancellation happens | Refund |
+|---|---|
+| Before survey | 100% of token |
+| After survey, cancelled because the site is infeasible, the final price is more than 5% above the indicative quote, DVVNL feasibility is rejected, or the loan is rejected | 100% of everything paid |
+| After survey, customer changes their mind, before procurement | Everything paid minus a ₹2,000 survey and design fee |
+| After procurement, before installation | Everything paid minus actual non-recoverable costs (restocking or return fees, survey fee), shown as an itemised statement |
+| After installation starts | No cancellation; warranty, defect and grievance process applies |
+
+Refunds are processed within 7 working days of approval, to the original payment method, and each one is a ledger entry tied to a `refund` task with an approver. The policy text is versioned and shown at token payment, and the accepted version is stored in `consents`.
+
+## 3D. Engineering approval (what it is and who does it)
+
+**What it is.** After the technician's site survey, a qualified person checks that the proposed system is safe and will actually work on *this* roof before money is spent on equipment. The checks:
+- roof type, strength and mounting structure
+- shading and orientation, and whether the final kW is achievable
+- string design (modules per string) matched to the inverter's voltage and current limits
+- cable sizes, earthing, lightning arrestor, AC/DC protection
+- sanctioned load vs. system size
+- a final bill of materials
+
+Sign-off moves the project to `DESIGN_APPROVED` and locks the final quote and BOM. The spec deliberately keeps this a human decision, not an AI one.
+
+**Who does it (proposal).**
+1. **Pilot default:** the vendor-of-record partner's engineer reviews and signs off inside our system. Their name and licence number are recorded on the approval, at no extra cost to us.
+2. **Independent check:** a freelance electrical engineer, paid per review, audits a random sample (e.g. 1 in 5) plus every non-standard case (RCC vs. tin-shed exceptions, >5 kW, heavy shading, load enhancement).
+3. **To keep reviews quick:** standard pre-engineered designs for 2/3/4/5 kW with fixed string layouts and BOMs. The review then becomes a guided checklist on the survey data (about 15–30 minutes), and only deviations need real engineering.
+
+In the system this is just the `engineer` role plus a `design_review` task type, so whoever fills it can be changed without code changes.
 
 ---
 
@@ -101,7 +188,7 @@ The spec's 18 entities, plus the additions marked ➕.
 - Bills: `electricity_bills` (file, sha256, source), `bill_readings` (fields, per-field confidence, confirmed_by)
 - Config (all versioned, immutable once published): ➕`catalogue_items` (DCR/ALMM flags, warranty), ➕`price_books`, ➕`tariffs` (per DISCOM, slabs, fixed charges), ➕`subsidy_rules`, ➕`lender_products`, ➕`calc_versions`, ➕`regulatory_checklists`
 - Sales: `solar_quotes` (grade, version, calc_version, config snapshot hash, inputs, outputs, status)
-- Projects: `solar_projects` (stage, workstream states, SLA), `project_events`, ➕`tasks` (type, assignee, due, SLA, effort_minutes, outcome)
+- Projects: `solar_projects` (stage, workstream states, SLA, ➕`vendor_of_record_id`, ➕`billing_entity`), `project_events`, ➕`tasks` (type, assignee, due, SLA, effort_minutes, outcome)
 - Finance: `loan_applications` (lender ref, status, KFS ref — **no KYC documents unless legal requires it**)
 - Field: `site_surveys`, `installers`, `installer_assignments`, `installation_tasks`, `installation_photos` (sha256, phash, exif, geo, ai_result, reviewer), `qa_results`
 - Supply: ➕`suppliers`, `purchase_orders`, ➕`po_lines`, ➕`serial_numbers`
@@ -266,11 +353,14 @@ Each spec §17 metric and where its data comes from:
 
 ## 15. Open questions
 
-1. Launch state/DISCOM, and whether we or a partner is vendor of record.
-2. Lender(s) and their integration mode.
-3. Booking advance amount, and refund/cancellation terms.
-4. Engineering approver: in-house part-time or partner?
-5. Is subsidy credited to the consumer or routed via the vendor in the launch state? This changes the payments flow and customer messaging.
+Resolved: geography (UP/DVVNL), vendor of record (partner), subsidy recipient (customer), booking and refund terms (§3C proposal), engineering approval (§3D proposal).
+
+Still open:
+1. **Which DVVNL-empanelled partner** (founder sourcing). Needed before the first survey.
+2. **Billing model:** does the partner or do we invoice the customer? Needs CA/legal input (§3A).
+3. **SBI confirmation:** current rates, disbursement recipient and tranches, documents (§3B).
+4. **Launch city** within DVVNL territory.
+5. Sign-off on the §3C advance and refund figures.
 
 ---
 
@@ -278,3 +368,6 @@ Each spec §17 metric and where its data comes from:
 - PM Surya Ghar national portal and vendor registration: https://solarcalculators.in/blog/pm-surya-ghar-vendor-registration.html
 - ALMM List-II in force from June 2026: https://www.mercomindia.com/list-ii-for-solar-cells-into-force-from-june-2026
 - RBI Digital Lending Directions 2025 overview: https://www.mondaq.com/india/financial-services/1634276/digital-lending-20-breaking-down-the-rbi-digital-lending-directions-2025
+- UP subsidy (central + UPNEDA state top-up, direct transfer to customer): https://greentax.in/solar/uttar-pradesh , https://ncssolar.in/pm-surya-ghar/subsidy-uttar-pradesh
+- DVVNL process and timelines (Agra): https://www.solaraiadvisor.com/rooftop-solar-agra.html
+- SBI PM Surya Ghar loan: https://bridgewaypower.in/blog/sbi-solar-loan-pm-surya-ghar-yojana-guide , https://myrsolar.com/sbi-pm-surya-ghar-solar-loan
