@@ -2,7 +2,7 @@ import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
   // Workspace packages ship TypeScript source.
-  transpilePackages: ['@solar/db', '@solar/domain', '@solar/integrations'],
+  transpilePackages: ['@solar/calc', '@solar/db', '@solar/domain', '@solar/integrations'],
   serverExternalPackages: ['postgres'],
   experimental: {
     // Bill uploads are capped at 10 MB; leave room for multipart overhead.

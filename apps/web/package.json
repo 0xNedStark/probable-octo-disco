@@ -12,6 +12,7 @@
     "e2e": "playwright test"
   },
   "dependencies": {
+    "@solar/calc": "workspace:*",
     "@solar/db": "workspace:*",
     "@solar/domain": "workspace:*",
     "@solar/integrations": "workspace:*",

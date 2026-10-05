@@ -1,9 +1,10 @@
 # Rooftop Solar Platform (MVP)
 
 AI-native residential rooftop solar orchestration for Uttar Pradesh (DVVNL), per
-[`docs/PLAN.md`](docs/PLAN.md). This repo currently implements **weeks 1–2**:
-foundation, lead capture, bill upload, the project state machine and the ops console
-used to run real projects by hand (concierge mode) while automation is built.
+[`docs/PLAN.md`](docs/PLAN.md). This repo currently implements **weeks 1–4**:
+foundation, lead capture, bill upload, the project state machine and ops console
+(weeks 1–2), plus the solar calculator, versioned configuration, quotes and customer
+proposals, and the AI Bill Agent (weeks 3–4).
 
 ## Layout
 
@@ -26,6 +27,15 @@ Key rules, enforced in code:
   with a mandatory note until the owning modules exist; then those modules record them as `system`.
 - Every human checkpoint is a **task** with an SLA; completing one requires the minutes spent
   (the "ops hours per project" metric).
+- **Every customer-visible number comes from `packages/calc`** using a versioned config bundle
+  (tariff, subsidy, price book, lenders, site). Each quote stores its inputs, config version ids,
+  config hash and calc version, and can be reproduced exactly; stored quote calculations and
+  published config are immutable at the database level.
+- **A quote priced from a placeholder price book cannot be sent.** The seed price book is a
+  placeholder until supplier quotes are entered in `/ops/config`.
+- **The AI never confirms anything.** The Bill Agent writes a _proposed_ reading; a person reviews it
+  against the bill and confirms. Only confirmed readings feed quotes. Every model call is logged in
+  `ai_actions` (ids and metrics only, no document content).
 
 ## Local development
 
@@ -37,13 +47,30 @@ createdb solar && createdb solar_test && createdb solar_e2e   # or use the SQL b
 pnpm install
 set -a; . ./.env; set +a
 pnpm db:migrate
-pnpm db:seed                         # creates the admin user from SEED_ADMIN_*
+pnpm db:seed                         # creates the admin user from SEED_ADMIN_* and seeds UP/DVVNL config
 pnpm dev                             # http://localhost:3000 and /ops
 pnpm worker                          # in another terminal: delivers outbox messages (logs them for now)
 ```
 
 Databases as SQL: `CREATE USER solar WITH PASSWORD 'solar' CREATEDB; CREATE DATABASE solar OWNER solar;`
 (repeat for `solar_test`, `solar_e2e`).
+
+## Bill Agent (optional)
+
+Set `AI_BILL_EXTRACTION=on` and Anthropic credentials (`ANTHROPIC_API_KEY`) for the worker. Uploaded
+bills are then read by Claude (`claude-opus-5-5`, structured output, server-side fallback on refusal)
+and pre-fill the review form. Low-confidence or invalid fields route to manual review
+(`AI_BILL_CONFIDENCE_THRESHOLD`, default 0.9). With it off, everything works manually.
+
+Before relying on it, run the eval on real labelled bills (keep them out of git):
+
+```bash
+AI_BILL_EXTRACTION=on pnpm --filter @solar/integrations eval:bills ./path/to/bills 0.9
+```
+
+Each `name.pdf|jpg|png` needs a `name.json` label with `consumerNumber, discom, tariffCategory,
+sanctionedLoadKw, periodStart, periodEnd, unitsKwh, amountRupees`. The plan's gate is ≥95% field
+accuracy (and high precision above the threshold) before auto-quoting.
 
 ## Checks
 
@@ -55,9 +82,12 @@ pnpm format:check
 ```
 
 After changing `packages/db/src/schema.ts`: `pnpm db:generate` and commit the new migration.
+After changing calculation logic: bump `CALC_VERSION` in `packages/calc/src/engine.ts` and regenerate
+golden outputs with `UPDATE_GOLDEN=1 pnpm --filter @solar/calc test`.
 
 ## Not built yet (next phases, see PLAN §9)
 
-Quote engine and calc (weeks 3–4), Bill Agent extraction, payments, WhatsApp BSP adapter,
-survey PWA, installer portal, procurement, regulatory checklist config. Known week-1–2 gaps:
-staff TOTP, phone OTP for customers, shared (multi-instance) rate limiting, orphaned-upload cleanup.
+Payments and booking advance, customer click-wrap acceptance (OTP), WhatsApp BSP adapter and
+Sales Agent (weeks 5–6); survey PWA, engineering review, installer portal, procurement,
+regulatory checklist config. Known gaps: staff TOTP, customer OTP, shared (multi-instance) rate
+limiting, orphaned-upload cleanup, server-side PDF rendering (proposals print to PDF from the browser).

@@ -2,6 +2,7 @@ import { newId } from '@solar/domain';
 import { sql } from 'drizzle-orm';
 import { createDb, type Db } from '../client';
 import { createUser } from '../services/auth';
+import { seedConfig } from '../services/config';
 import type { ServiceActor } from '../services/common';
 import { createLead, type CreateLeadInput } from '../services/leads';
 import { TEST_DATABASE_URL } from './global-setup';
@@ -10,14 +11,18 @@ export function testDb() {
   return createDb(TEST_DATABASE_URL, { max: 4 });
 }
 
-/** Wipe all data. The append-only triggers block DELETE, so TRUNCATE (which bypasses row triggers). */
+/**
+ * Wipe all data and re-seed config. The append-only triggers block DELETE, so
+ * TRUNCATE (which bypasses row triggers).
+ */
 export async function reset(db: Db): Promise<void> {
   await db.execute(sql`
-    truncate table file_access_log, outbox, tasks, project_facts, project_events, bill_readings,
+    truncate table config_versions, ai_actions, solar_quotes, file_access_log, outbox, tasks, project_facts, project_events, bill_readings,
       electricity_bills, solar_projects, leads, consents, customers, sessions, users
     restart identity cascade
   `);
   await db.execute(sql`alter sequence project_code_seq restart`);
+  await seedConfig(db);
 }
 
 export async function staff(db: Db, role: 'admin' | 'ops' | 'sales' | 'engineer' | 'finance') {

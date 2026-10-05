@@ -123,6 +123,23 @@ export async function queueCustomerMessage(
   return true;
 }
 
+/** Queue background work for the worker in the same transaction as the change that needs it. */
+export async function queueJob(
+  db: DbOrTx,
+  projectId: string | null,
+  job: string,
+  payload: Record<string, unknown>,
+): Promise<void> {
+  await db.insert(outbox).values({
+    id: newId('outbox'),
+    projectId,
+    channel: 'internal',
+    template: job,
+    recipient: 'worker',
+    payload,
+  });
+}
+
 export type TransitionOutcome =
   { ok: true; from: string; to: string } | { ok: false; error: TransitionError };
 

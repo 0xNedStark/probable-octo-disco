@@ -20,6 +20,8 @@ export type Permission =
   | 'bill.enter_readings'
   | 'file.read_personal'
   | 'task.work'
+  | 'quote.manage'
+  | 'config.manage'
   | 'users.manage';
 
 const GRANTS: Record<Role, readonly Permission[]> = {
@@ -30,6 +32,8 @@ const GRANTS: Record<Role, readonly Permission[]> = {
     'bill.enter_readings',
     'file.read_personal',
     'task.work',
+    'quote.manage',
+    'config.manage',
     'users.manage',
   ],
   ops: [
@@ -39,8 +43,9 @@ const GRANTS: Record<Role, readonly Permission[]> = {
     'bill.enter_readings',
     'file.read_personal',
     'task.work',
+    'quote.manage',
   ],
-  sales: ['project.view', 'bill.enter_readings', 'file.read_personal', 'task.work'],
+  sales: ['project.view', 'bill.enter_readings', 'file.read_personal', 'task.work', 'quote.manage'],
   engineer: ['project.view', 'file.read_personal', 'task.work'],
   finance: ['project.view', 'workstream.transition', 'file.read_personal', 'task.work'],
   installer: [],

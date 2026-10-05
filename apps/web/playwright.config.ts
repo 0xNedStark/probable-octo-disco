@@ -19,6 +19,8 @@ export default defineConfig({
       DATABASE_URL: E2E_DATABASE_URL,
       STORAGE_DRIVER: 'local',
       STORAGE_LOCAL_DIR: './test-results/storage',
+      PUBLIC_BASE_URL: `http://localhost:${PORT}`,
+      AI_BILL_EXTRACTION: 'off',
     },
   },
 });

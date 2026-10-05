@@ -11,6 +11,7 @@ export default async function ConsoleLayout({ children }: { children: ReactNode 
         <nav>
           <Link href="/ops">Projects</Link>
           <Link href="/ops/tasks">Tasks</Link>
+          <Link href="/ops/config">Config</Link>
         </nav>
         <form action={logout} className="row">
           <span className="muted small">

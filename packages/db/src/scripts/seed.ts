@@ -2,6 +2,7 @@ import { eq } from 'drizzle-orm';
 import { createDb } from '../client';
 import { users } from '../schema';
 import { createUser } from '../services/auth';
+import { seedConfig } from '../services/config';
 
 const url = process.env.DATABASE_URL;
 const email = process.env.SEED_ADMIN_EMAIL;
@@ -22,6 +23,8 @@ try {
     await createUser(db, { email, name: 'Admin', role: 'admin', password });
     console.log(`created admin ${email}`);
   }
+  const seeded = await seedConfig(db);
+  console.log(seeded.length ? `seeded config: ${seeded.join(', ')}` : 'config already present');
 } finally {
   await close();
 }

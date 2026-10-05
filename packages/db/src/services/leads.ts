@@ -23,6 +23,7 @@ import {
   applyWorkstreamTransition,
   lockProject,
   queueCustomerMessage,
+  queueJob,
   recordEvent,
   recordFact,
 } from './projects';
@@ -251,6 +252,8 @@ export async function attachBillInTx(
     await applyWorkstreamTransition(tx, actor, p, 'bill', 'RECEIVED', 'bill uploaded');
     await createTask(tx, 'bill_review', projectId);
   }
+  // The Bill Agent reads it in the background; ops can still enter readings by hand.
+  await queueJob(tx, projectId, 'bill.extract', { billId: bill.id });
 }
 
 /** Ops uploads a bill on the customer's behalf (e.g. received on WhatsApp before the bot exists). */

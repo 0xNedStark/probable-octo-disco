@@ -11,9 +11,18 @@ export function formatDateTime(d: Date | string | null | undefined): string {
   }).format(new Date(d));
 }
 
-export function formatRupees(paise: number | null | undefined): string {
+export function formatRupees(
+  paise: number | null | undefined,
+  opts: { whole?: boolean } = {},
+): string {
   if (paise == null) return '—';
-  return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(paise / 100);
+  const digits = opts.whole ? 0 : 2;
+  return new Intl.NumberFormat('en-IN', {
+    style: 'currency',
+    currency: 'INR',
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  }).format(paise / 100);
 }
 
 export function relativeDue(due: Date, now = new Date()): { text: string; overdue: boolean } {

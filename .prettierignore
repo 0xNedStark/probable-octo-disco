@@ -2,3 +2,4 @@ pnpm-lock.yaml
 packages/db/drizzle
 .next
 docs
+packages/calc/src/__golden__

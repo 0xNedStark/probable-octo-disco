@@ -14,6 +14,9 @@ export const ID_PREFIXES = {
   task: 'tsk',
   outbox: 'obx',
   fileAccess: 'fax',
+  config: 'cfg',
+  quote: 'qte',
+  aiAction: 'aia',
 } as const;
 
 export type IdKind = keyof typeof ID_PREFIXES;

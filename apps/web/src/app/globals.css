@@ -276,3 +276,23 @@ details summary {
   height: 1px;
   overflow: hidden;
 }
+@media print {
+  .no-print,
+  .topbar {
+    display: none !important;
+  }
+  body {
+    background: #fff;
+    color: #000;
+  }
+  .card {
+    border-color: #ccc;
+    break-inside: avoid;
+  }
+  details {
+    display: block;
+  }
+  details > summary {
+    list-style: none;
+  }
+}

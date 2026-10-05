@@ -9,4 +9,7 @@ export * from './services/tasks';
 export * from './services/queries';
 export * from './services/auth';
 export * from './services/outbox';
-export { sql } from 'drizzle-orm';
+export * from './services/config';
+export * from './services/quotes';
+export * from './services/ai';
+export { eq, sql } from 'drizzle-orm';

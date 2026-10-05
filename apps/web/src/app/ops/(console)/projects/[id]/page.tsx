@@ -1,4 +1,4 @@
-import { getProjectDetail, ServiceError } from '@solar/db';
+import { activeConfig, getProjectDetail, listQuotes, ServiceError } from '@solar/db';
 import {
   can,
   canAttest,
@@ -16,15 +16,11 @@ import { getDb } from '@/lib/db';
 import { formatDateTime, formatRupees, humanize, relativeDue } from '@/lib/format';
 import { Flash } from '../../../flash';
 import { StageBadge } from '../../../stage-badge';
-import {
-  askForNewBill,
-  attestFact,
-  finishTask,
-  moveStage,
-  moveWorkstream,
-  saveReadings,
-  uploadBill,
-} from './actions';
+import { attestFact, finishTask, moveStage, moveWorkstream } from './actions';
+import { BillSection } from './bill-section';
+import { QuotePanel } from './quote-panel';
+
+const AI_THRESHOLD = Number(process.env.AI_BILL_CONFIDENCE_THRESHOLD ?? 0.9);
 
 export default async function ProjectPage({
   params,
@@ -37,20 +33,21 @@ export default async function ProjectPage({
   const { id } = await params;
   const { error, ok } = await searchParams;
 
-  let d;
+  let d, quotes, config;
   try {
-    d = await getProjectDetail(getDb(), id);
+    [d, quotes, config] = await Promise.all([
+      getProjectDetail(getDb(), id),
+      listQuotes(getDb(), id),
+      activeConfig(getDb()),
+    ]);
   } catch (e) {
     if (e instanceof ServiceError && e.code === 'NOT_FOUND') notFound();
     throw e;
   }
   const { project: p, customer: c, snapshot } = d;
-  const latestBill = d.bills[0];
-  const latestReading = d.readings[0];
   const canMove = can(user.role, 'project.transition');
   const canMoveWs = can(user.role, 'workstream.transition');
   const canBill = can(user.role, 'bill.enter_readings');
-  const needsReadings = ['RECEIVED', 'EXTRACTED', 'NEEDS_MANUAL'].includes(p.billState);
   const openTasks = d.tasks.filter((t) => t.status === 'OPEN');
 
   return (
@@ -129,153 +126,15 @@ export default async function ProjectPage({
             })}
           </section>
 
-          {/* Bill */}
-          <section className="card stack">
-            <div className="row" style={{ justifyContent: 'space-between' }}>
-              <h2>Electricity bill</h2>
-              <span className="badge">{humanize(p.billState)}</span>
-            </div>
-            {d.bills.length === 0 && <p className="muted">No bill yet.</p>}
-            <ul className="small">
-              {d.bills.map((b) => (
-                <li key={b.id}>
-                  <a href={`/ops/files/bills/${b.id}`} target="_blank" rel="noreferrer">
-                    {b.originalFilename}
-                  </a>{' '}
-                  <span className="muted">
-                    {Math.round(b.sizeBytes / 1024)} KB · {b.source} ·{' '}
-                    {formatDateTime(b.uploadedAt)}
-                  </span>
-                </li>
-              ))}
-            </ul>
-            {latestReading && (
-              <div className="small">
-                <strong>Latest readings</strong> ({latestReading.source},{' '}
-                {formatDateTime(latestReading.createdAt)}): {latestReading.unitsKwh} kWh,{' '}
-                {formatRupees(latestReading.amountPaise)} for {latestReading.periodStart} →{' '}
-                {latestReading.periodEnd}; {latestReading.tariffCategory}; sanctioned load{' '}
-                {latestReading.sanctionedLoadW / 1000} kW; A/c {latestReading.consumerNumber}
-                {latestReading.monthlyHistory.length > 0 && (
-                  <>
-                    {' '}
-                    · history:{' '}
-                    {latestReading.monthlyHistory.map((m) => `${m.month} ${m.units}`).join(', ')}
-                  </>
-                )}
-              </div>
-            )}
-            {canBill && latestBill && needsReadings && (
-              <details open>
-                <summary>Enter readings from the bill</summary>
-                <form
-                  action={saveReadings.bind(null, p.id)}
-                  className="stack"
-                  style={{ marginTop: 8 }}
-                >
-                  <input type="hidden" name="billId" value={latestBill.id} />
-                  <div className="field-row">
-                    <div>
-                      <label htmlFor="consumerNumber">Account / consumer number</label>
-                      <input
-                        id="consumerNumber"
-                        name="consumerNumber"
-                        required
-                        defaultValue={c.consumerNumber ?? ''}
-                      />
-                    </div>
-                    <div>
-                      <label htmlFor="discom">DISCOM</label>
-                      <input
-                        id="discom"
-                        name="discom"
-                        required
-                        defaultValue={c.discom ?? 'DVVNL'}
-                      />
-                    </div>
-                  </div>
-                  <div className="field-row">
-                    <div>
-                      <label htmlFor="tariffCategory">Tariff category</label>
-                      <input
-                        id="tariffCategory"
-                        name="tariffCategory"
-                        required
-                        placeholder="e.g. LMV-1"
-                      />
-                    </div>
-                    <div>
-                      <label htmlFor="sanctionedLoadKw">Sanctioned load (kW)</label>
-                      <input
-                        id="sanctionedLoadKw"
-                        name="sanctionedLoadKw"
-                        required
-                        inputMode="decimal"
-                      />
-                    </div>
-                  </div>
-                  <div className="field-row">
-                    <div>
-                      <label htmlFor="periodStart">Period start</label>
-                      <input id="periodStart" name="periodStart" type="date" required />
-                    </div>
-                    <div>
-                      <label htmlFor="periodEnd">Period end</label>
-                      <input id="periodEnd" name="periodEnd" type="date" required />
-                    </div>
-                  </div>
-                  <div className="field-row">
-                    <div>
-                      <label htmlFor="unitsKwh">Units (kWh)</label>
-                      <input id="unitsKwh" name="unitsKwh" required inputMode="numeric" />
-                    </div>
-                    <div>
-                      <label htmlFor="amountRupees">Bill amount (₹)</label>
-                      <input id="amountRupees" name="amountRupees" required inputMode="decimal" />
-                    </div>
-                  </div>
-                  <div>
-                    <label htmlFor="monthlyHistory">
-                      Monthly history from the bill, one per line (optional)
-                    </label>
-                    <textarea
-                      id="monthlyHistory"
-                      name="monthlyHistory"
-                      rows={3}
-                      placeholder={'2026-07: 450\n2026-06: 510'}
-                    />
-                  </div>
-                  <button type="submit">Save readings and confirm bill</button>
-                </form>
-              </details>
-            )}
-            {canBill && latestBill && needsReadings && (
-              <form action={askForNewBill.bind(null, p.id)} className="row">
-                <input
-                  name="reason"
-                  placeholder="What's wrong with the bill?"
-                  required
-                  style={{ flex: 1 }}
-                />
-                <button type="submit" className="secondary">
-                  Ask for clearer bill
-                </button>
-              </form>
-            )}
-            {canBill && (
-              <form action={uploadBill.bind(null, p.id)} className="row">
-                <input
-                  type="file"
-                  name="bill"
-                  accept="application/pdf,image/jpeg,image/png,image/webp"
-                  style={{ flex: 1 }}
-                />
-                <button type="submit" className="secondary">
-                  Upload bill for customer
-                </button>
-              </form>
-            )}
-          </section>
+          <QuotePanel
+            projectId={p.id}
+            quotes={quotes}
+            config={config}
+            canQuote={can(user.role, 'quote.manage')}
+            hasConfirmedReading={d.readings.some((r) => r.status === 'confirmed')}
+          />
+
+          <BillSection d={d} canBill={canBill} threshold={AI_THRESHOLD} />
 
           {/* Timeline */}
           <section className="card">

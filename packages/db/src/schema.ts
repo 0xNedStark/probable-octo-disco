@@ -8,6 +8,7 @@ import type {
   TaskType,
   WorkstreamState,
 } from '@solar/domain';
+import type { CalcInput, CalcOutput, ConfigKind } from '@solar/calc';
 import { sql } from 'drizzle-orm';
 import {
   bigint,
@@ -20,6 +21,7 @@ import {
   pgTable,
   text,
   timestamp,
+  uniqueIndex,
 } from 'drizzle-orm/pg-core';
 
 const createdAt = () => timestamp('created_at', { withTimezone: true }).notNull().defaultNow();
@@ -179,7 +181,14 @@ export const billReadings = pgTable(
     source: text('source').notNull(),
     /** Per-field model confidence when source = ai. */
     confidence: jsonb('confidence').$type<Record<string, number>>(),
+    /** proposed (AI, awaiting human confirmation) | confirmed | rejected */
+    status: text('status')
+      .$type<'proposed' | 'confirmed' | 'rejected'>()
+      .notNull()
+      .default('confirmed'),
     enteredBy: text('entered_by').references(() => users.id),
+    confirmedBy: text('confirmed_by').references(() => users.id),
+    confirmedAt: ts('confirmed_at'),
     createdAt: createdAt(),
   },
   (t) => [index('readings_project_idx').on(t.projectId)],
@@ -290,3 +299,78 @@ export const fileAccessLog = pgTable('file_access_log', {
     .references(() => solarProjects.id),
   accessedAt: ts('accessed_at').notNull().defaultNow(),
 });
+
+/** Immutable, versioned configuration documents (tariff, subsidy, price book, lenders, site). */
+export const configVersions = pgTable(
+  'config_versions',
+  {
+    id: text('id').primaryKey(),
+    kind: text('kind').$type<ConfigKind>().notNull(),
+    version: integer('version').notNull(),
+    body: jsonb('body').$type<Record<string, unknown>>().notNull(),
+    /** sha256 of the canonical body. */
+    bodyHash: text('body_hash').notNull(),
+    note: text('note').notNull(),
+    createdBy: text('created_by').references(() => users.id),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex('config_kind_version_idx').on(t.kind, t.version)],
+);
+
+export type QuoteGrade = 'INDICATIVE' | 'FINAL';
+export type QuoteStatus = 'DRAFT' | 'SENT' | 'ACCEPTED' | 'SUPERSEDED';
+
+export const solarQuotes = pgTable(
+  'solar_quotes',
+  {
+    id: text('id').primaryKey(),
+    projectId: text('project_id')
+      .notNull()
+      .references(() => solarProjects.id),
+    /** 1, 2, 3… per project. */
+    version: integer('version').notNull(),
+    grade: text('grade').$type<QuoteGrade>().notNull(),
+    status: text('status').$type<QuoteStatus>().notNull().default('DRAFT'),
+    calcVersion: text('calc_version').notNull(),
+    /** config_versions ids used, by kind. */
+    configVersionIds: jsonb('config_version_ids').$type<Record<ConfigKind, string>>().notNull(),
+    configHash: text('config_hash').notNull(),
+    input: jsonb('input').$type<CalcInput>().notNull(),
+    output: jsonb('output').$type<CalcOutput>().notNull(),
+    /** sha256 of the canonical output, to prove reproduction. */
+    outputHash: text('output_hash').notNull(),
+    systemKw: text('system_kw').notNull(),
+    totalPaise: bigint('total_paise', { mode: 'number' }).notNull(),
+    /** sha256 of the customer share token; the raw token only appears in the link. */
+    shareTokenHash: text('share_token_hash').unique(),
+    validUntil: date('valid_until').notNull(),
+    createdBy: text('created_by').references(() => users.id),
+    createdAt: createdAt(),
+    sentAt: ts('sent_at'),
+    acceptedAt: ts('accepted_at'),
+  },
+  (t) => [uniqueIndex('quotes_project_version_idx').on(t.projectId, t.version)],
+);
+
+/** Every model call is logged (PLAN §8 guardrails). */
+export const aiActions = pgTable(
+  'ai_actions',
+  {
+    id: text('id').primaryKey(),
+    projectId: text('project_id').references(() => solarProjects.id),
+    agent: text('agent').notNull(),
+    promptVersion: text('prompt_version').notNull(),
+    model: text('model').notNull(),
+    /** What the call was about, e.g. { billId }. Never raw document content. */
+    inputRef: jsonb('input_ref').$type<Record<string, unknown>>().notNull(),
+    output: jsonb('output').$type<Record<string, unknown>>(),
+    /** ok | refused | invalid_output | error */
+    outcome: text('outcome').notNull(),
+    error: text('error'),
+    inputTokens: integer('input_tokens'),
+    outputTokens: integer('output_tokens'),
+    latencyMs: integer('latency_ms'),
+    createdAt: createdAt(),
+  },
+  (t) => [index('ai_actions_project_idx').on(t.projectId)],
+);

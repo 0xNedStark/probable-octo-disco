@@ -15,6 +15,20 @@
       "when": 1791211280979,
       "tag": "0001_audit_guards",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791213486400,
+      "tag": "0002_quotes_config_ai",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1791213540165,
+      "tag": "0003_immutable_config_quotes",
+      "breakpoints": true
     }
   ]
 }

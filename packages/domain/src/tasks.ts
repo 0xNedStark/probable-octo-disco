@@ -12,6 +12,7 @@ export const TASK_TYPES = {
     slaMinutes: 24 * 60,
     defaultRole: 'sales',
   },
+  quote_follow_up: { label: 'Follow up on sent quote', slaMinutes: 24 * 60, defaultRole: 'sales' },
   general: { label: 'General', slaMinutes: 24 * 60, defaultRole: 'ops' },
 } as const satisfies Record<string, { label: string; slaMinutes: number; defaultRole: Role }>;
 

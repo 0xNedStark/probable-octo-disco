@@ -19,6 +19,9 @@ const { db, close } = testDb();
 afterAll(close);
 beforeEach(() => reset(db));
 
+const whatsapp = async () =>
+  (await db.select().from(outbox)).filter((m) => m.channel === 'whatsapp');
+
 function reading(billId: string, overrides: Partial<BillReadingInput> = {}): BillReadingInput {
   return {
     billId,
@@ -57,8 +60,12 @@ describe('createLead', () => {
     );
     expect(d.tasks.map((t) => t.type).sort()).toEqual(['bill_review', 'first_contact']);
 
-    const msgs = await db.select().from(outbox);
+    const msgs = await whatsapp();
     expect(msgs).toHaveLength(1);
+    const jobs = (await db.select().from(outbox)).filter((m) => m.channel === 'internal');
+    expect(jobs).toMatchObject([
+      { template: 'bill.extract', payload: { billId: expect.any(String) } },
+    ]);
     expect(msgs[0]).toMatchObject({ template: 'lead_received', recipient: '+919876543210' });
   });
 
@@ -66,7 +73,7 @@ describe('createLead', () => {
     await seedLead(db, {
       consent: { contact: true, whatsapp: false, textVersion: 'v1', channel: 'web' },
     });
-    expect(await db.select().from(outbox)).toHaveLength(0);
+    expect(await whatsapp()).toHaveLength(0);
   });
 
   it('rejects missing consent and bad phone numbers', async () => {
@@ -173,7 +180,7 @@ describe('bill readings → QUALIFIED', () => {
     const d = await getProjectDetail(db, projectId);
     expect(d.project.billState).toBe('NEEDS_RESUBMIT');
     expect(d.tasks.some((t) => t.type === 'bill_resubmit_follow_up')).toBe(true);
-    const templates = (await db.select().from(outbox)).map((m) => m.template).sort();
+    const templates = (await whatsapp()).map((m) => m.template).sort();
     expect(templates).toEqual(['bill_resubmit', 'lead_received']);
   });
 });
@@ -210,7 +217,7 @@ describe('stage transitions with facts (concierge mode)', () => {
     await recordFact(db, finance, projectId, 'booking_advance', true, 'UPI ref 1234, ₹5,000');
     expect((await transitionStage(db, ops, projectId, 'BOOKED')).ok).toBe(true);
 
-    const templates = (await db.select().from(outbox)).map((m) => [m.template, m.payload.stage]);
+    const templates = (await whatsapp()).map((m) => [m.template, m.payload.stage]);
     expect(templates).toEqual(
       expect.arrayContaining([
         ['stage_changed', 'QUOTED'],
@@ -386,8 +393,8 @@ describe('files', () => {
 
 describe('outbox', () => {
   it('claims each message once, retries with backoff, and marks sent', async () => {
-    await seedLead(db);
-    await seedLead(db, { phone: '9123456789' });
+    await seedLead(db, { bill: undefined });
+    await seedLead(db, { phone: '9123456789', bill: undefined });
     const [a, b] = await Promise.all([claimOutbox(db, 1), claimOutbox(db, 1)]);
     expect(a).toHaveLength(1);
     expect(b).toHaveLength(1);

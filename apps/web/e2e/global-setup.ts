@@ -1,4 +1,4 @@
-import { createDb, createUser } from '@solar/db';
+import { createDb, createUser, seedConfig } from '@solar/db';
 import { runMigrations } from '@solar/db/migrate';
 import postgres from 'postgres';
 import { E2E_DATABASE_URL } from '../playwright.config';
@@ -14,5 +14,6 @@ export default async function setup(): Promise<void> {
   await runMigrations(E2E_DATABASE_URL);
   const { db, close } = createDb(E2E_DATABASE_URL, { max: 1 });
   await createUser(db, { ...ADMIN, name: 'E2E Admin', role: 'admin' });
+  await seedConfig(db);
   await close();
 }

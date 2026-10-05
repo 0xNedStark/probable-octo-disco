@@ -1,7 +1,10 @@
 'use server';
 
 import {
+  acceptQuote,
   attachBill,
+  generateQuote,
+  sendQuote,
   completeTask,
   enterBillReadings,
   recordFact,
@@ -28,7 +31,7 @@ const str = (form: FormData, key: string) => String(form.get(key) ?? '').trim();
  */
 async function run(
   projectId: string,
-  ok: string,
+  ok: string | (() => string),
   fn: () => Promise<TransitionOutcome | void>,
 ): Promise<never> {
   let error: string | undefined;
@@ -40,7 +43,9 @@ async function run(
     error = e.message;
   }
   revalidatePath(`/ops/projects/${projectId}`);
-  const q = error ? `error=${encodeURIComponent(error)}` : `ok=${encodeURIComponent(ok)}`;
+  const q = error
+    ? `error=${encodeURIComponent(error)}`
+    : `ok=${encodeURIComponent(typeof ok === 'function' ? ok() : ok)}`;
   redirect(`/ops/projects/${projectId}?${q}`);
 }
 
@@ -95,18 +100,24 @@ function parseHistory(text: string): MonthlyUsage[] {
 export async function saveReadings(projectId: string, form: FormData) {
   const user = await requireStaff('bill.enter_readings');
   await run(projectId, 'Bill readings saved.', () =>
-    enterBillReadings(getDb(), actorOf(user), projectId, {
-      billId: str(form, 'billId'),
-      consumerNumber: str(form, 'consumerNumber'),
-      discom: str(form, 'discom'),
-      tariffCategory: str(form, 'tariffCategory'),
-      sanctionedLoadKw: Number(str(form, 'sanctionedLoadKw')),
-      periodStart: str(form, 'periodStart'),
-      periodEnd: str(form, 'periodEnd'),
-      unitsKwh: Number(str(form, 'unitsKwh')),
-      amountRupees: Number(str(form, 'amountRupees')),
-      monthlyHistory: parseHistory(str(form, 'monthlyHistory')),
-    }),
+    enterBillReadings(
+      getDb(),
+      actorOf(user),
+      projectId,
+      {
+        billId: str(form, 'billId'),
+        consumerNumber: str(form, 'consumerNumber'),
+        discom: str(form, 'discom'),
+        tariffCategory: str(form, 'tariffCategory'),
+        sanctionedLoadKw: Number(str(form, 'sanctionedLoadKw')),
+        periodStart: str(form, 'periodStart'),
+        periodEnd: str(form, 'periodEnd'),
+        unitsKwh: Number(str(form, 'unitsKwh')),
+        amountRupees: Number(str(form, 'amountRupees')),
+        monthlyHistory: parseHistory(str(form, 'monthlyHistory')),
+      },
+      { proposedReadingId: str(form, 'proposedReadingId') || undefined },
+    ),
   );
 }
 
@@ -160,4 +171,50 @@ export async function finishTask(projectId: string | null, form: FormData) {
   }
   revalidatePath(back);
   redirect(`${back}?${error ? `error=${encodeURIComponent(error)}` : 'ok=Task+completed.'}`);
+}
+
+const optionalNumber = (form: FormData, key: string): number | undefined => {
+  const v = str(form, key);
+  if (!v) return undefined;
+  const n = Number(v);
+  if (!Number.isFinite(n) || n <= 0)
+    throw new ServiceError('INVALID', `${key} must be a positive number.`);
+  return n;
+};
+
+export async function createQuote(projectId: string, form: FormData) {
+  const user = await requireStaff('quote.manage');
+  const grade = str(form, 'grade') === 'FINAL' ? 'FINAL' : 'INDICATIVE';
+  await run(projectId, 'Quote calculated.', async () => {
+    const offsetPct = optionalNumber(form, 'targetOffsetPct');
+    await generateQuote(getDb(), actorOf(user), projectId, {
+      grade,
+      tariffCategory: str(form, 'tariffCategory') || undefined,
+      roofAreaM2: optionalNumber(form, 'roofAreaM2'),
+      targetOffset: offsetPct != null ? offsetPct / 100 : undefined,
+      packageId: str(form, 'packageId') || undefined,
+    });
+  });
+}
+
+export async function markQuoteSent(projectId: string, quoteId: string) {
+  const user = await requireStaff('quote.manage');
+  const base = process.env.PUBLIC_BASE_URL;
+  if (!base) throw new Error('PUBLIC_BASE_URL is not set');
+  let url = '';
+  await run(
+    projectId,
+    // Shown once: only the token's hash is stored. Until the WhatsApp BSP is live, share it by hand.
+    () => `Quote sent. Customer link (copy now, shown once): ${url}`,
+    async () => {
+      url = (await sendQuote(getDb(), actorOf(user), quoteId, base)).url;
+    },
+  );
+}
+
+export async function markQuoteAccepted(projectId: string, quoteId: string, form: FormData) {
+  const user = await requireStaff('quote.manage');
+  await run(projectId, 'Acceptance recorded.', () =>
+    acceptQuote(getDb(), actorOf(user), quoteId, str(form, 'note')),
+  );
 }
