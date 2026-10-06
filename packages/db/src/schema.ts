@@ -374,3 +374,146 @@ export const aiActions = pgTable(
   },
   (t) => [index('ai_actions_project_idx').on(t.projectId)],
 );
+
+export type PaymentStatus = 'CREATED' | 'PAID' | 'FAILED' | 'EXPIRED' | 'CANCELLED' | 'REFUNDED';
+
+export const payments = pgTable(
+  'payments',
+  {
+    id: text('id').primaryKey(),
+    projectId: text('project_id')
+      .notNull()
+      .references(() => solarProjects.id),
+    /** booking_advance | milestone | other */
+    purpose: text('purpose').notNull(),
+    amountPaise: bigint('amount_paise', { mode: 'number' }).notNull(),
+    status: text('status').$type<PaymentStatus>().notNull().default('CREATED'),
+    /** razorpay | dev | manual */
+    provider: text('provider').notNull(),
+    /** Payment link id at the provider. */
+    providerRef: text('provider_ref').unique(),
+    providerPaymentId: text('provider_payment_id').unique(),
+    payUrl: text('pay_url'),
+    /** UPI/NEFT reference for manual payments. */
+    reference: text('reference'),
+    /** config_versions id of the commercial terms in force. */
+    commercialConfigId: text('commercial_config_id'),
+    quoteId: text('quote_id').references(() => solarQuotes.id),
+    createdBy: text('created_by').references(() => users.id),
+    createdAt: createdAt(),
+    paidAt: ts('paid_at'),
+    refundedAt: ts('refunded_at'),
+  },
+  (t) => [index('payments_project_idx').on(t.projectId)],
+);
+
+/** Double-entry-lite money movements; append-only (migration). */
+export const ledgerEntries = pgTable(
+  'ledger_entries',
+  {
+    id: text('id').primaryKey(),
+    projectId: text('project_id')
+      .notNull()
+      .references(() => solarProjects.id),
+    paymentId: text('payment_id').references(() => payments.id),
+    debitAccount: text('debit_account').notNull(),
+    creditAccount: text('credit_account').notNull(),
+    amountPaise: bigint('amount_paise', { mode: 'number' }).notNull(),
+    memo: text('memo').notNull(),
+    actorType: text('actor_type').$type<ActorType>().notNull(),
+    actorId: text('actor_id').notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [index('ledger_project_idx').on(t.projectId)],
+);
+
+/** Inbound webhooks, stored before processing; (provider, event_id) makes delivery idempotent. */
+export const webhookEvents = pgTable(
+  'webhook_events',
+  {
+    id: text('id').primaryKey(),
+    provider: text('provider').notNull(),
+    eventId: text('event_id').notNull(),
+    type: text('type').notNull(),
+    payload: jsonb('payload').$type<Record<string, unknown>>().notNull(),
+    receivedAt: ts('received_at').notNull().defaultNow(),
+    processedAt: ts('processed_at'),
+    error: text('error'),
+  },
+  (t) => [uniqueIndex('webhook_provider_event_idx').on(t.provider, t.eventId)],
+);
+
+export const otpChallenges = pgTable(
+  'otp_challenges',
+  {
+    id: text('id').primaryKey(),
+    /** e.g. quote_accept */
+    purpose: text('purpose').notNull(),
+    /** What is being authorised, e.g. a quote id. */
+    subjectId: text('subject_id').notNull(),
+    phone: text('phone').notNull(),
+    codeHash: text('code_hash').notNull(),
+    attempts: integer('attempts').notNull().default(0),
+    expiresAt: ts('expires_at').notNull(),
+    consumedAt: ts('consumed_at'),
+    createdAt: createdAt(),
+  },
+  (t) => [index('otp_subject_idx').on(t.purpose, t.subjectId, t.createdAt)],
+);
+
+export type LoanStatus =
+  'DOCS_PENDING' | 'SUBMITTED' | 'SANCTIONED' | 'REJECTED' | 'DISBURSED' | 'WITHDRAWN';
+
+/** The customer applies to the bank; we track status. No KYC documents are stored (PLAN §3B). */
+export const loanApplications = pgTable(
+  'loan_applications',
+  {
+    id: text('id').primaryKey(),
+    projectId: text('project_id')
+      .notNull()
+      .references(() => solarProjects.id),
+    lender: text('lender').notNull(),
+    productId: text('product_id').notNull(),
+    requestedPaise: bigint('requested_paise', { mode: 'number' }).notNull(),
+    status: text('status').$type<LoanStatus>().notNull().default('DOCS_PENDING'),
+    /** Bank / JanSamarth application reference. */
+    externalRef: text('external_ref'),
+    sanctionedPaise: bigint('sanctioned_paise', { mode: 'number' }),
+    disbursedPaise: bigint('disbursed_paise', { mode: 'number' }),
+    /** Which checklist items the customer has ready (ticked by staff). */
+    checklist: jsonb('checklist').$type<Record<string, boolean>>().notNull().default({}),
+    note: text('note'),
+    createdBy: text('created_by').references(() => users.id),
+    createdAt: createdAt(),
+    updatedAt: ts('updated_at').notNull().defaultNow(),
+  },
+  (t) => [index('loans_project_idx').on(t.projectId)],
+);
+
+export const messages = pgTable(
+  'messages',
+  {
+    id: text('id').primaryKey(),
+    projectId: text('project_id').references(() => solarProjects.id),
+    customerId: text('customer_id').references(() => customers.id),
+    channel: text('channel').notNull(),
+    direction: text('direction').$type<'in' | 'out'>().notNull(),
+    /** Provider message id; unique so webhook retries don't duplicate. */
+    providerMessageId: text('provider_message_id').unique(),
+    phone: text('phone').notNull(),
+    /** text | image | document | template | other */
+    kind: text('kind').notNull(),
+    body: text('body'),
+    mediaId: text('media_id'),
+    mediaMimeType: text('media_mime_type'),
+    /** For outbound: customer | agent | staff | system */
+    author: text('author'),
+    authorId: text('author_id'),
+    outboxId: text('outbox_id'),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index('messages_phone_idx').on(t.phone, t.createdAt),
+    index('messages_project_idx').on(t.projectId, t.createdAt),
+  ],
+);

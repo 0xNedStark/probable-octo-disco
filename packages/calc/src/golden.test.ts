@@ -21,6 +21,7 @@ const versions = {
   subsidy: 'subsidy@1',
   pricebook: 'pricebook@1',
   lenders: 'lenders@1',
+  commercial: 'commercial@1',
 };
 
 function cases(): { name: string; input: CalcInput }[] {

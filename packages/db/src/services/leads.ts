@@ -262,10 +262,11 @@ export async function attachBill(
   actor: ServiceActor,
   projectId: string,
   bill: UploadedBill,
+  source: 'ops' | 'whatsapp' = 'ops',
 ): Promise<void> {
   authorize(actor, 'bill.enter_readings');
   await db.transaction(async (tx) => {
     const p = await lockProject(tx, projectId);
-    await attachBillInTx(tx, actor, projectId, p.customerId, bill, 'ops');
+    await attachBillInTx(tx, actor, projectId, p.customerId, bill, source);
   });
 }

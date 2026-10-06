@@ -22,6 +22,9 @@ export type Permission =
   | 'task.work'
   | 'quote.manage'
   | 'config.manage'
+  | 'payment.manage'
+  | 'finance.manage'
+  | 'message.send'
   | 'users.manage';
 
 const GRANTS: Record<Role, readonly Permission[]> = {
@@ -34,6 +37,9 @@ const GRANTS: Record<Role, readonly Permission[]> = {
     'task.work',
     'quote.manage',
     'config.manage',
+    'payment.manage',
+    'finance.manage',
+    'message.send',
     'users.manage',
   ],
   ops: [
@@ -44,10 +50,26 @@ const GRANTS: Record<Role, readonly Permission[]> = {
     'file.read_personal',
     'task.work',
     'quote.manage',
+    'finance.manage',
+    'message.send',
   ],
-  sales: ['project.view', 'bill.enter_readings', 'file.read_personal', 'task.work', 'quote.manage'],
+  sales: [
+    'project.view',
+    'bill.enter_readings',
+    'file.read_personal',
+    'task.work',
+    'quote.manage',
+    'message.send',
+  ],
   engineer: ['project.view', 'file.read_personal', 'task.work'],
-  finance: ['project.view', 'workstream.transition', 'file.read_personal', 'task.work'],
+  finance: [
+    'project.view',
+    'workstream.transition',
+    'file.read_personal',
+    'task.work',
+    'payment.manage',
+    'finance.manage',
+  ],
   installer: [],
   technician: [],
 };

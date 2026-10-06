@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@solar/db": "workspace:*",
+    "@solar/domain": "workspace:*",
     "@solar/integrations": "workspace:*"
   },
   "devDependencies": {

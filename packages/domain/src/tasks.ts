@@ -13,6 +13,14 @@ export const TASK_TYPES = {
     defaultRole: 'sales',
   },
   quote_follow_up: { label: 'Follow up on sent quote', slaMinutes: 24 * 60, defaultRole: 'sales' },
+  schedule_survey: { label: 'Schedule site survey', slaMinutes: 24 * 60, defaultRole: 'ops' },
+  whatsapp_reply: { label: 'Reply to customer on WhatsApp', slaMinutes: 15, defaultRole: 'sales' },
+  payment_review: { label: 'Review payment issue', slaMinutes: 4 * 60, defaultRole: 'finance' },
+  loan_follow_up: {
+    label: 'Follow up on loan application',
+    slaMinutes: 3 * 24 * 60,
+    defaultRole: 'finance',
+  },
   general: { label: 'General', slaMinutes: 24 * 60, defaultRole: 'ops' },
 } as const satisfies Record<string, { label: string; slaMinutes: number; defaultRole: Role }>;
 

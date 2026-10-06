@@ -17,7 +17,8 @@ export function testDb() {
  */
 export async function reset(db: Db): Promise<void> {
   await db.execute(sql`
-    truncate table config_versions, ai_actions, solar_quotes, file_access_log, outbox, tasks, project_facts, project_events, bill_readings,
+    truncate table messages, loan_applications, otp_challenges, webhook_events, ledger_entries, payments,
+      config_versions, ai_actions, solar_quotes, file_access_log, outbox, tasks, project_facts, project_events, bill_readings,
       electricity_bills, solar_projects, leads, consents, customers, sessions, users
     restart identity cascade
   `);

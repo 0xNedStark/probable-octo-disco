@@ -1,4 +1,11 @@
-import { claimOutbox, markFailed, markSent, type DbOrTx, type OutboxMessage } from '@solar/db';
+import {
+  claimOutbox,
+  markFailed,
+  markSent,
+  recordOutbound,
+  type DbOrTx,
+  type OutboxMessage,
+} from '@solar/db';
 import type { Notifier } from '@solar/integrations';
 
 /** Background job handlers keyed by outbox template (channel 'internal'). */
@@ -22,7 +29,21 @@ export async function dispatchOutbox(
         if (!handler) throw new Error(`No handler for job ${msg.template}`);
         await handler(msg);
       } else {
-        await notifier.send(msg);
+        const sent = await notifier.send(msg);
+        if (msg.channel === 'whatsapp') {
+          await recordOutbound(db, {
+            outboxId: msg.id,
+            projectId: msg.projectId,
+            phone: msg.recipient,
+            template: msg.template,
+            rendered:
+              sent?.rendered ??
+              (msg.template === 'reply' ? String(msg.payload.text ?? '') : `[${msg.template}]`),
+            providerMessageId: sent?.providerMessageId ?? null,
+            author: typeof msg.payload.author === 'string' ? msg.payload.author : 'system',
+            authorId: typeof msg.payload.authorId === 'string' ? msg.payload.authorId : null,
+          });
+        }
       }
       await markSent(db, msg.id);
     } catch (e) {

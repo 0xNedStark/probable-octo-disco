@@ -117,8 +117,27 @@ export const LenderConfigSchema = z.object({
       tenorMonths: z.number().int().positive(),
       /** True until terms are confirmed with the lender. */
       placeholder: z.boolean(),
+      /** What the customer must have ready for the bank. We track readiness, never store copies. */
+      documents: z.array(z.string()).default([]),
     }),
   ),
+});
+
+/**
+ * Commercial terms shown to customers (PLAN §3C). Not used by the calculation
+ * engine, but versioned alongside it so every booking records the terms in force.
+ */
+export const CommercialConfigSchema = z.object({
+  bookingTokenPaise: paise,
+  /** Kept from refunds when the customer cancels after the survey for their own reasons. */
+  surveyFeePaise: paise,
+  /** A final quote more than this % above the indicative one allows a full refund. */
+  finalPriceTolerancePct: z.number().min(0).max(100),
+  refundPolicyVersion: z.string().min(1),
+  /** Short policy text shown at acceptance; the full policy lives on the website. */
+  refundPolicySummary: z.array(z.string().min(1)).min(1),
+  /** When a loan counts as "funds secured" for procurement. */
+  fundsSecuredOn: z.enum(['sanction', 'disbursement']),
 });
 
 export type SiteConfig = z.infer<typeof SiteConfigSchema>;
@@ -126,6 +145,7 @@ export type TariffConfig = z.infer<typeof TariffConfigSchema>;
 export type SubsidyConfig = z.infer<typeof SubsidyConfigSchema>;
 export type PriceBookConfig = z.infer<typeof PriceBookConfigSchema>;
 export type LenderConfig = z.infer<typeof LenderConfigSchema>;
+export type CommercialConfig = z.infer<typeof CommercialConfigSchema>;
 
 export const CONFIG_SCHEMAS = {
   site: SiteConfigSchema,
@@ -133,6 +153,7 @@ export const CONFIG_SCHEMAS = {
   subsidy: SubsidyConfigSchema,
   pricebook: PriceBookConfigSchema,
   lenders: LenderConfigSchema,
+  commercial: CommercialConfigSchema,
 } as const;
 
 export type ConfigKind = keyof typeof CONFIG_SCHEMAS;
@@ -144,6 +165,7 @@ export interface ConfigBundle {
   subsidy: SubsidyConfig;
   pricebook: PriceBookConfig;
   lenders: LenderConfig;
+  commercial: CommercialConfig;
 }
 
 /** Version labels for traceability in outputs, e.g. { pricebook: 'pricebook@3' }. */

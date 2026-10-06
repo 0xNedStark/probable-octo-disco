@@ -10,6 +10,8 @@ import type { ConfigBundle } from './config';
  * - pricebook: PLACEHOLDER figures — replace with supplier quotes. Quotes from a
  *   placeholder price book cannot be sent to customers.
  * - lenders: SBI PM Surya Ghar terms as publicly reported; PLACEHOLDER until confirmed.
+ * - commercial: booking token, survey fee and refund terms proposed in PLAN §3C;
+ *   pending legal/CA review.
  * - site: yield and seasonal profiles are approximations for Agra; calibrate with
  *   PVGIS and the 12-month history printed on real bills.
  */
@@ -142,6 +144,14 @@ export const UP_DVVNL_SEED: ConfigBundle = {
         annualRatePct: 7,
         tenorMonths: 120,
         placeholder: true,
+        documents: [
+          'Aadhaar and PAN (shown to the bank; we do not keep copies)',
+          'Last 6 months bank statement',
+          'Latest electricity bill',
+          'Income proof (salary slips or ITR)',
+          'PM Surya Ghar application number',
+          'House ownership proof (registry or house tax receipt)',
+        ],
       },
       {
         id: 'sbi-rooftop-3-10kw',
@@ -154,7 +164,28 @@ export const UP_DVVNL_SEED: ConfigBundle = {
         annualRatePct: 10.15,
         tenorMonths: 120,
         placeholder: true,
+        documents: [
+          'Aadhaar and PAN (shown to the bank; we do not keep copies)',
+          'Last 6 months bank statement',
+          'Latest electricity bill',
+          'Income proof (salary slips or ITR)',
+          'PM Surya Ghar application number',
+          'House ownership proof (registry or house tax receipt)',
+        ],
       },
     ],
+  },
+  commercial: {
+    bookingTokenPaise: rupees(5000),
+    surveyFeePaise: rupees(2000),
+    finalPriceTolerancePct: 5,
+    refundPolicyVersion: 'refund-v1-2026-10',
+    refundPolicySummary: [
+      'Booking token is fully refundable before the site survey.',
+      'Full refund of everything paid if the roof is unsuitable, the final price is more than 5% above this quote, DVVNL rejects the application, or the loan is rejected.',
+      'If you cancel for your own reasons after the survey, we keep a ₹2,000 survey and design fee.',
+      'Refunds are made within 7 working days to the original payment method.',
+    ],
+    fundsSecuredOn: 'sanction',
   },
 };

@@ -69,6 +69,9 @@ importers:
       '@solar/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@solar/domain':
+        specifier: workspace:*
+        version: link:../../packages/domain
       '@solar/integrations':
         specifier: workspace:*
         version: link:../../packages/integrations

@@ -1,6 +1,13 @@
 'use server';
 
 import {
+  sendStaffReply,
+  chooseFinancePath,
+  updateLoan,
+  type LoanUpdate,
+  recordManualPayment,
+  recordRefund,
+  requestBookingPayment,
   acceptQuote,
   attachBill,
   generateQuote,
@@ -21,6 +28,7 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { actorOf, requireStaff } from '@/lib/auth';
 import { getDb } from '@/lib/db';
+import { getPaymentProvider, publicBaseUrl } from '@/lib/payments';
 import { getStorage } from '@/lib/storage';
 
 const str = (form: FormData, key: string) => String(form.get(key) ?? '').trim();
@@ -216,5 +224,99 @@ export async function markQuoteAccepted(projectId: string, quoteId: string, form
   const user = await requireStaff('quote.manage');
   await run(projectId, 'Acceptance recorded.', () =>
     acceptQuote(getDb(), actorOf(user), quoteId, str(form, 'note')),
+  );
+}
+
+const rupeesToPaise = (form: FormData, key: string): number => {
+  const n = Number(str(form, key));
+  if (!Number.isFinite(n) || n <= 0) throw new ServiceError('INVALID', 'Enter a positive amount.');
+  return Math.round(n * 100);
+};
+
+export async function requestBooking(projectId: string) {
+  const user = await requireStaff('quote.manage');
+  const provider = getPaymentProvider();
+  if (!provider) throw new Error('No payment gateway configured');
+  let url: string | null = null;
+  await run(
+    projectId,
+    () => `Payment link sent to the customer: ${url}`,
+    async () => {
+      url = (
+        await requestBookingPayment(getDb(), actorOf(user), projectId, provider, publicBaseUrl())
+      ).payUrl;
+    },
+  );
+}
+
+export async function addManualPayment(projectId: string, form: FormData) {
+  const user = await requireStaff('payment.manage');
+  const purpose = str(form, 'purpose');
+  if (purpose !== 'booking_advance' && purpose !== 'milestone' && purpose !== 'other')
+    throw new Error('bad purpose');
+  await run(projectId, 'Payment recorded.', async () => {
+    await recordManualPayment(getDb(), actorOf(user), projectId, {
+      purpose,
+      amountPaise: rupeesToPaise(form, 'amountRupees'),
+      reference: str(form, 'reference'),
+    });
+  });
+}
+
+export async function addRefund(projectId: string, paymentId: string, form: FormData) {
+  const user = await requireStaff('payment.manage');
+  await run(projectId, 'Refund recorded.', () =>
+    recordRefund(getDb(), actorOf(user), paymentId, {
+      amountPaise: rupeesToPaise(form, 'amountRupees'),
+      reference: str(form, 'reference'),
+      reason: str(form, 'reason'),
+    }),
+  );
+}
+
+export async function pickFinancePath(projectId: string, form: FormData) {
+  const user = await requireStaff('finance.manage');
+  const path = str(form, 'path');
+  await run(projectId, 'Finance path set.', async () => {
+    await chooseFinancePath(
+      getDb(),
+      actorOf(user),
+      projectId,
+      path === 'cash' ? 'cash' : { productId: path },
+    );
+  });
+}
+
+export async function changeLoan(projectId: string, loanId: string, form: FormData) {
+  const user = await requireStaff('finance.manage');
+  const action = str(form, 'action');
+  await run(projectId, 'Loan updated.', async () => {
+    let u: LoanUpdate;
+    switch (action) {
+      case 'checklist':
+        u = { action, item: str(form, 'item'), ready: str(form, 'ready') === 'true' };
+        break;
+      case 'submit':
+        u = { action, externalRef: str(form, 'externalRef') };
+        break;
+      case 'sanction':
+      case 'disburse':
+        u = { action, amountPaise: rupeesToPaise(form, 'amountRupees') };
+        break;
+      case 'reject':
+      case 'withdraw':
+        u = { action, reason: str(form, 'reason') };
+        break;
+      default:
+        throw new ServiceError('INVALID', 'Unknown loan action.');
+    }
+    await updateLoan(getDb(), actorOf(user), loanId, u);
+  });
+}
+
+export async function replyOnWhatsApp(projectId: string, form: FormData) {
+  const user = await requireStaff('message.send');
+  await run(projectId, 'Reply queued on WhatsApp.', () =>
+    sendStaffReply(getDb(), actorOf(user), projectId, str(form, 'text')),
   );
 }

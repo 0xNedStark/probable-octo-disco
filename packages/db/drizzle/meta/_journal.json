@@ -29,6 +29,20 @@
       "when": 1791213540165,
       "tag": "0003_immutable_config_quotes",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1791266349953,
+      "tag": "0004_payments_whatsapp_finance",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1791266350884,
+      "tag": "0005_ledger_append_only",
+      "breakpoints": true
     }
   ]
 }

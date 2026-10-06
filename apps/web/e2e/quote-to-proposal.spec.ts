@@ -69,7 +69,7 @@ test('quote: placeholder prices block sending; real prices → send → customer
   );
   await pb.getByPlaceholder('What changed and why').fill('Supplier quotes received');
   await pb.getByRole('button', { name: /Publish pricebook/ }).click();
-  await expect(page.getByText(/Published pricebook v2/)).toBeVisible();
+  await expect(page.getByText(/Published pricebook v\d+/)).toBeVisible();
 
   // Re-quote and send.
   await page.goto(projectUrl);

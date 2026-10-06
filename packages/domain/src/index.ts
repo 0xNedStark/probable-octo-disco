@@ -7,3 +7,4 @@ export * from './roles';
 export * from './ids';
 export * from './tasks';
 export * from './phone';
+export * from './customer-copy';

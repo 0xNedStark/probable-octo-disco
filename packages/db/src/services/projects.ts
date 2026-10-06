@@ -15,7 +15,7 @@ import {
 import { and, desc, eq, sql } from 'drizzle-orm';
 import type { DbOrTx, Tx } from '../client';
 import { customers, consents, outbox, projectEvents, projectFacts, solarProjects } from '../schema';
-import { authorize, ServiceError, type ServiceActor } from './common';
+import { authorize, ServiceError, SYSTEM, type ServiceActor } from './common';
 
 type ProjectRow = typeof solarProjects.$inferSelect;
 
@@ -155,6 +155,35 @@ const NOTIFY_STAGES: readonly Stage[] = [
   'HANDED_OVER',
 ];
 
+/** Apply a stage move inside an existing transaction. Callers authorise. */
+export async function applyStageTransition(
+  tx: Tx,
+  actor: ServiceActor,
+  projectId: string,
+  to: Stage,
+  reason?: string,
+): Promise<TransitionOutcome> {
+  const p = await lockProject(tx, projectId);
+  const plan = planStageTransition(await snapshotOf(tx, p), to, reason);
+  if (!plan.ok) return plan;
+  await tx
+    .update(solarProjects)
+    .set({ stage: plan.value.to, heldFromStage: plan.value.heldFromStage, updatedAt: new Date() })
+    .where(eq(solarProjects.id, projectId));
+  await recordEvent(tx, {
+    projectId,
+    type: 'stage_changed',
+    actor,
+    from: plan.value.from,
+    to: plan.value.to,
+    reason: reason?.trim() || null,
+  });
+  if (NOTIFY_STAGES.includes(plan.value.to)) {
+    await queueCustomerMessage(tx, projectId, 'stage_changed', { stage: plan.value.to });
+  }
+  return { ok: true, from: plan.value.from, to: plan.value.to };
+}
+
 export async function transitionStage(
   db: DbOrTx,
   actor: ServiceActor,
@@ -163,27 +192,29 @@ export async function transitionStage(
   reason?: string,
 ): Promise<TransitionOutcome> {
   authorize(actor, 'project.transition');
-  return db.transaction(async (tx) => {
+  return db.transaction((tx) => applyStageTransition(tx, actor, projectId, to, reason));
+}
+
+/**
+ * After a customer-driven event (e.g. payment), move the project forward along
+ * `path` for as long as each gate passes. Stops silently at the first blocked step.
+ */
+export async function autoAdvance(
+  tx: Tx,
+  projectId: string,
+  path: readonly Stage[],
+  reason: string,
+): Promise<string[]> {
+  const moved: string[] = [];
+  for (;;) {
     const p = await lockProject(tx, projectId);
-    const plan = planStageTransition(await snapshotOf(tx, p), to, reason);
-    if (!plan.ok) return plan;
-    await tx
-      .update(solarProjects)
-      .set({ stage: plan.value.to, heldFromStage: plan.value.heldFromStage, updatedAt: new Date() })
-      .where(eq(solarProjects.id, projectId));
-    await recordEvent(tx, {
-      projectId,
-      type: 'stage_changed',
-      actor,
-      from: plan.value.from,
-      to: plan.value.to,
-      reason: reason?.trim() || null,
-    });
-    if (NOTIFY_STAGES.includes(plan.value.to)) {
-      await queueCustomerMessage(tx, projectId, 'stage_changed', { stage: plan.value.to });
-    }
-    return { ok: true, from: plan.value.from, to: plan.value.to };
-  });
+    const idx = path.indexOf(p.stage);
+    const next = idx >= 0 ? path[idx + 1] : undefined;
+    if (!next) return moved;
+    const r = await applyStageTransition(tx, SYSTEM, projectId, next, reason);
+    if (!r.ok) return moved;
+    moved.push(next);
+  }
 }
 
 /** Apply a workstream move inside an existing transaction (project row already locked). */

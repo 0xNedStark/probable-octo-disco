@@ -1,4 +1,14 @@
-import { activeConfig, getProjectDetail, listQuotes, ServiceError } from '@solar/db';
+import {
+  activeConfig,
+  conversation,
+  customerAdvanceBalance,
+  getProjectDetail,
+  listLoans,
+  listPayments,
+  listQuotes,
+  ServiceError,
+  statusUrl,
+} from '@solar/db';
 import {
   can,
   canAttest,
@@ -18,7 +28,11 @@ import { Flash } from '../../../flash';
 import { StageBadge } from '../../../stage-badge';
 import { attestFact, finishTask, moveStage, moveWorkstream } from './actions';
 import { BillSection } from './bill-section';
+import { ConversationPanel } from './conversation-panel';
+import { FinancePanel } from './finance-panel';
+import { PaymentsPanel } from './payments-panel';
 import { QuotePanel } from './quote-panel';
+import { getPaymentProvider } from '@/lib/payments';
 
 const AI_THRESHOLD = Number(process.env.AI_BILL_CONFIDENCE_THRESHOLD ?? 0.9);
 
@@ -33,12 +47,15 @@ export default async function ProjectPage({
   const { id } = await params;
   const { error, ok } = await searchParams;
 
-  let d, quotes, config;
+  let d, quotes, config, payments, balance, loans;
   try {
-    [d, quotes, config] = await Promise.all([
+    [d, quotes, config, payments, balance, loans] = await Promise.all([
       getProjectDetail(getDb(), id),
       listQuotes(getDb(), id),
       activeConfig(getDb()),
+      listPayments(getDb(), id),
+      customerAdvanceBalance(getDb(), id),
+      listLoans(getDb(), id),
     ]);
   } catch (e) {
     if (e instanceof ServiceError && e.code === 'NOT_FOUND') notFound();
@@ -68,6 +85,15 @@ export default async function ProjectPage({
             <span>{c.discom}</span>
             {c.consumerNumber && <span>A/c {c.consumerNumber}</span>}
             {d.lead && <span>via {d.lead.source}</span>}
+            {process.env.STATUS_LINK_SECRET && process.env.PUBLIC_BASE_URL && (
+              <a
+                href={statusUrl(p.id, process.env.PUBLIC_BASE_URL, process.env.STATUS_LINK_SECRET)}
+                target="_blank"
+                rel="noreferrer"
+              >
+                customer status page
+              </a>
+            )}
             {d.lead?.statedMonthlyBillPaise != null && (
               <span>says bill ≈ {formatRupees(d.lead.statedMonthlyBillPaise)}/month</span>
             )}
@@ -134,6 +160,27 @@ export default async function ProjectPage({
             hasConfirmedReading={d.readings.some((r) => r.status === 'confirmed')}
           />
 
+          <PaymentsPanel
+            projectId={p.id}
+            payments={payments}
+            balancePaise={balance}
+            canManage={can(user.role, 'payment.manage')}
+            canRequest={
+              can(user.role, 'quote.manage') &&
+              quotes.some((q) => q.status === 'ACCEPTED' && q.grade === 'INDICATIVE') &&
+              !payments.some((x) => x.purpose === 'booking_advance' && x.status === 'PAID')
+            }
+            gatewayConfigured={getPaymentProvider() !== null}
+          />
+
+          <FinancePanel
+            projectId={p.id}
+            financeState={p.financeState}
+            loans={loans}
+            acceptedQuote={quotes.find((q) => q.status === 'ACCEPTED') ?? null}
+            canManage={can(user.role, 'finance.manage')}
+          />
+
           <BillSection d={d} canBill={canBill} threshold={AI_THRESHOLD} />
 
           {/* Timeline */}
@@ -155,6 +202,12 @@ export default async function ProjectPage({
         </div>
 
         <div className="stack">
+          <ConversationPanel
+            projectId={p.id}
+            messages={await conversation(getDb(), c.phone)}
+            canSend={can(user.role, 'message.send')}
+          />
+
           {/* Tasks */}
           <section className="card stack">
             <h2>Open tasks</h2>

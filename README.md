@@ -1,10 +1,12 @@
 # Rooftop Solar Platform (MVP)
 
 AI-native residential rooftop solar orchestration for Uttar Pradesh (DVVNL), per
-[`docs/PLAN.md`](docs/PLAN.md). This repo currently implements **weeks 1–4**:
+[`docs/PLAN.md`](docs/PLAN.md). This repo currently implements **weeks 1–6**:
 foundation, lead capture, bill upload, the project state machine and ops console
-(weeks 1–2), plus the solar calculator, versioned configuration, quotes and customer
-proposals, and the AI Bill Agent (weeks 3–4).
+(weeks 1–2); the solar calculator, versioned configuration, quotes, customer
+proposals and the AI Bill Agent (weeks 3–4); and customer OTP acceptance, booking
+payments with a ledger, the customer status page, the finance (loan) tracker,
+WhatsApp in/out and the AI Sales Agent (weeks 5–6).
 
 ## Layout
 
@@ -33,6 +35,15 @@ Key rules, enforced in code:
   published config are immutable at the database level.
 - **A quote priced from a placeholder price book cannot be sent.** The seed price book is a
   placeholder until supplier quotes are entered in `/ops/config`.
+- **Money is append-only.** Payments post double-entry rows to `ledger_entries` (never edited;
+  refunds are reversing entries). Gateway webhooks are signature-checked, stored, and processed
+  exactly once; an amount mismatch becomes an ops task instead of a booking. A paid booking
+  advance moves the project to BOOKED automatically when every gate passes.
+- **Customers accept proposals themselves** with a one-time code sent on WhatsApp; the refund
+  policy version they agreed to is recorded with the acceptance.
+- **The Sales Agent can only state facts from `customerFacts()`**, and every draft passes a
+  deterministic guard (no numbers absent from the facts, no requests for Aadhaar/OTP/bank
+  details; faults and complaints always reach a person). Blocked drafts go to the task inbox.
 - **The AI never confirms anything.** The Bill Agent writes a _proposed_ reading; a person reviews it
   against the bill and confirms. Only confirmed readings feed quotes. Every model call is logged in
   `ai_actions` (ids and metrics only, no document content).
@@ -54,6 +65,19 @@ pnpm worker                          # in another terminal: delivers outbox mess
 
 Databases as SQL: `CREATE USER solar WITH PASSWORD 'solar' CREATEDB; CREATE DATABASE solar OWNER solar;`
 (repeat for `solar_test`, `solar_e2e`).
+
+## Payments, WhatsApp and the Sales Agent
+
+- **Payments:** `PAYMENTS_PROVIDER=dev` runs a local test gateway (`/pay/dev/...`) that sends a
+  signed Razorpay-format webhook through the real handler. `PAYMENTS_PROVIDER=razorpay` uses
+  Razorpay Payment Links (`RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `PAYMENTS_WEBHOOK_SECRET`);
+  register `https://<domain>/api/webhooks/payments` for `payment_link.*` events. The dev gateway
+  refuses to start in production. Finance can always record UPI/bank transfers and refunds by hand.
+- **WhatsApp:** see [`docs/whatsapp-templates.md`](docs/whatsapp-templates.md) for the templates to
+  submit and the settings. Without `WHATSAPP_PROVIDER=meta` the worker logs messages instead.
+- **Sales Agent:** `AI_SALES_AGENT=on` (worker, with Anthropic credentials) drafts replies with
+  `claude-opus-5-5`. Off, every inbound message becomes a `whatsapp_reply` task.
+- **Status links:** `STATUS_LINK_SECRET` signs `/s/<token>` customer status pages.
 
 ## Bill Agent (optional)
 
@@ -87,7 +111,6 @@ golden outputs with `UPDATE_GOLDEN=1 pnpm --filter @solar/calc test`.
 
 ## Not built yet (next phases, see PLAN §9)
 
-Payments and booking advance, customer click-wrap acceptance (OTP), WhatsApp BSP adapter and
-Sales Agent (weeks 5–6); survey PWA, engineering review, installer portal, procurement,
-regulatory checklist config. Known gaps: staff TOTP, customer OTP, shared (multi-instance) rate
+Survey PWA, engineering review and final quotes, installer portal, procurement, regulatory
+checklist config, cash milestone payments (weeks 7–10). Known gaps: staff TOTP, customer OTP, shared (multi-instance) rate
 limiting, orphaned-upload cleanup, server-side PDF rendering (proposals print to PDF from the browser).

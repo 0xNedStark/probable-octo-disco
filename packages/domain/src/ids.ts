@@ -17,6 +17,12 @@ export const ID_PREFIXES = {
   config: 'cfg',
   quote: 'qte',
   aiAction: 'aia',
+  payment: 'pay',
+  ledger: 'lgr',
+  webhook: 'whk',
+  otp: 'otp',
+  loan: 'lon',
+  message: 'msg',
 } as const;
 
 export type IdKind = keyof typeof ID_PREFIXES;

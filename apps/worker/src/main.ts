@@ -1,30 +1,64 @@
-import { createDb } from '@solar/db';
-import { billExtractorFromEnv, LogNotifier, storageFromEnv } from '@solar/integrations';
+import { createDb, statusUrl } from '@solar/db';
+import {
+  billExtractorFromEnv,
+  DevWhatsAppMedia,
+  LogNotifier,
+  MetaWhatsApp,
+  salesAgentFromEnv,
+  storageFromEnv,
+  type Notifier,
+  type WhatsAppMedia,
+} from '@solar/integrations';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { dispatchOutbox } from './dispatch';
 import { jobHandlers } from './jobs';
 
-const url = process.env.DATABASE_URL;
-if (!url) throw new Error('DATABASE_URL is not set');
+const env = process.env;
+if (!env.DATABASE_URL) throw new Error('DATABASE_URL is not set');
 
-const POLL_MS = Number(process.env.OUTBOX_POLL_MS ?? 2000);
-const { db, close } = createDb(url, { max: 2 });
-const notifier = new LogNotifier();
+const POLL_MS = Number(env.OUTBOX_POLL_MS ?? 2000);
+const { db, close } = createDb(env.DATABASE_URL, { max: 2 });
+const base = env.PUBLIC_BASE_URL ?? null;
+const secret = env.STATUS_LINK_SECRET ?? null;
+const statusLink = (projectId: string | null) =>
+  projectId && base && secret ? statusUrl(projectId, base, secret) : null;
+
+let notifier: Notifier;
+let media: WhatsAppMedia | null;
+if (env.WHATSAPP_PROVIDER === 'meta') {
+  if (!env.WHATSAPP_PHONE_NUMBER_ID || !env.WHATSAPP_ACCESS_TOKEN) {
+    throw new Error('WHATSAPP_PHONE_NUMBER_ID and WHATSAPP_ACCESS_TOKEN are required');
+  }
+  const wa = new MetaWhatsApp(
+    env.WHATSAPP_PHONE_NUMBER_ID,
+    env.WHATSAPP_ACCESS_TOKEN,
+    statusLink,
+    env.WHATSAPP_GRAPH_VERSION || undefined,
+  );
+  notifier = wa;
+  media = wa;
+} else {
+  notifier = new LogNotifier();
+  media = new DevWhatsAppMedia();
+}
+
 const billExtractor = billExtractorFromEnv();
+const salesAgent = salesAgentFromEnv();
 const jobs = jobHandlers({
   db,
   storage: storageFromEnv(),
   billExtractor,
-  confidenceThreshold: Number(process.env.AI_BILL_CONFIDENCE_THRESHOLD ?? 0.9),
+  confidenceThreshold: Number(env.AI_BILL_CONFIDENCE_THRESHOLD ?? 0.9),
+  salesAgent,
+  media,
+  links: { statusUrl: statusLink, privacyUrl: base ? `${base.replace(/\/$/, '')}/privacy` : null },
 });
 const controller = new AbortController();
-
-for (const signal of ['SIGINT', 'SIGTERM'] as const) {
-  process.on(signal, () => controller.abort());
-}
+for (const signal of ['SIGINT', 'SIGTERM'] as const) process.on(signal, () => controller.abort());
 
 console.log(
-  `worker started; polling outbox every ${POLL_MS}ms; bill extraction ${billExtractor ? 'on' : 'off'}`,
+  `worker started; polling every ${POLL_MS}ms; whatsapp ${env.WHATSAPP_PROVIDER === 'meta' ? 'meta' : 'log only'}; ` +
+    `bill agent ${billExtractor ? 'on' : 'off'}; sales agent ${salesAgent ? 'on' : 'off'}`,
 );
 while (!controller.signal.aborted) {
   try {

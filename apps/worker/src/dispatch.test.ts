@@ -17,7 +17,7 @@ afterAll(async () => {
   if (dir) await rm(dir, { recursive: true, force: true });
 });
 beforeEach(async () => {
-  await db.execute(sql`truncate table ai_actions, outbox, tasks, project_facts, project_events, bill_readings,
+  await db.execute(sql`truncate table messages, ai_actions, outbox, tasks, project_facts, project_events, bill_readings,
     electricity_bills, solar_projects, leads, consents, customers cascade`);
 });
 

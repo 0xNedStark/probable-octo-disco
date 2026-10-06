@@ -13,6 +13,7 @@ const KIND_LABELS = {
   subsidy: 'Subsidy rules',
   lenders: 'Lender products',
   site: 'Site assumptions (yield, profiles, sizing limits)',
+  commercial: 'Commercial terms (booking token, refund policy)',
 } as const;
 
 export default async function ConfigPage({

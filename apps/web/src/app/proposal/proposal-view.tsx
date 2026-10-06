@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import type { QuoteRow } from '@solar/db';
 import { formatRupees as formatExact } from '@/lib/format';
 
@@ -26,11 +27,14 @@ export function ProposalView({
   firstName,
   projectCode,
   staffPreview = false,
+  acceptSlot,
 }: {
   quote: QuoteRow;
   firstName: string;
   projectCode: string;
   staffPreview?: boolean;
+  /** Customer-only acceptance controls, rendered in "Next step". */
+  acceptSlot?: ReactNode;
 }) {
   const o = quote.output;
   const avg = (a: number[]) => Math.round(a.reduce((x, y) => x + y, 0) / a.length);
@@ -251,10 +255,12 @@ export function ProposalView({
 
       <section className="card stack">
         <h2>Next step</h2>
-        <p>
-          Reply <strong>YES</strong> on WhatsApp or tell our team when you call, and we will
-          schedule a free site survey.
-        </p>
+        {acceptSlot ?? (
+          <p>
+            Reply <strong>YES</strong> on WhatsApp or tell our team when you call, and we will
+            schedule a free site survey.
+          </p>
+        )}
         <PrintButton />
       </section>
 

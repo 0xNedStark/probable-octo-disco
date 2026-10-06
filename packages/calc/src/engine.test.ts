@@ -16,6 +16,7 @@ const versions: ConfigVersions = {
   subsidy: 'subsidy@1',
   pricebook: 'pricebook@1',
   lenders: 'lenders@1',
+  commercial: 'commercial@1',
 };
 const bundle = UP_DVVNL_SEED;
 const year = (units: number) =>

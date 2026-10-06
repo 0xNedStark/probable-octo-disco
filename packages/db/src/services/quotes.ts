@@ -287,7 +287,11 @@ export async function reproduceQuote(db: DbOrTx, quoteId: string): Promise<Repro
  * Resolve a customer proposal link. Records a view event (at most hourly) so
  * sales can see the customer opened it.
  */
-export async function getQuoteByToken(db: DbOrTx, token: string) {
+export async function getQuoteByToken(
+  db: DbOrTx,
+  token: string,
+  opts: { recordView?: boolean } = {},
+) {
   if (!/^[A-Za-z0-9_-]{20,64}$/.test(token)) return null;
   const [row] = await db
     .select({ quote: solarQuotes, customerName: customers.name, projectCode: solarProjects.code })
@@ -296,6 +300,8 @@ export async function getQuoteByToken(db: DbOrTx, token: string) {
     .innerJoin(customers, eq(customers.id, solarProjects.customerId))
     .where(eq(solarQuotes.shareTokenHash, hashToken(token)));
   if (!row) return null;
+  if (opts.recordView === false)
+    return { ...row, firstName: row.customerName.split(/\s+/)[0] ?? row.customerName };
   const [recent] = await db
     .select({ id: projectEvents.id })
     .from(projectEvents)

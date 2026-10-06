@@ -4,6 +4,8 @@ const PORT = 3100;
 export const E2E_DATABASE_URL =
   process.env.E2E_DATABASE_URL ?? 'postgres://solar:solar@localhost:5432/solar_e2e';
 
+export const E2E_WHATSAPP_SECRET = 'e2e-whatsapp-app-secret';
+
 export default defineConfig({
   testDir: './e2e',
   timeout: 60_000,
@@ -21,6 +23,11 @@ export default defineConfig({
       STORAGE_LOCAL_DIR: './test-results/storage',
       PUBLIC_BASE_URL: `http://localhost:${PORT}`,
       AI_BILL_EXTRACTION: 'off',
+      STATUS_LINK_SECRET: 'e2e-status-secret',
+      PAYMENTS_PROVIDER: 'dev',
+      PAYMENTS_WEBHOOK_SECRET: 'e2e-webhook-secret',
+      ALLOW_DEV_PAYMENTS: '1',
+      WHATSAPP_APP_SECRET: E2E_WHATSAPP_SECRET,
     },
   },
 });
